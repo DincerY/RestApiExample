@@ -1,8 +1,13 @@
 package app
 
 import (
+	"RestApiExample/models"
 	u "RestApiExample/utils"
+	"context"
+	"fmt"
+	"github.com/dgrijalva/jwt-go"
 	"net/http"
+	"os"
 	"strings"
 )
 
@@ -32,7 +37,6 @@ var JwtAuthentication = func(next http.Handler) http.Handler {
 
 		splitted := strings.Split(tokenHeader, " ")
 		if len(splitted) != 2 {
-			//Bu dönüş değerini böyle değilde bir hazır format olarak yapmaya çalışalım
 			response := u.Message(false, "Hatalı yada geçersiz token")
 			w.WriteHeader(http.StatusForbidden)
 			w.Header().Add("Content-Type", "application/json")
@@ -40,6 +44,34 @@ var JwtAuthentication = func(next http.Handler) http.Handler {
 			return
 		}
 
+		tokenPart := splitted[1]
+		tk := &models.Token{}
+
+		token, err := jwt.ParseWithClaims(tokenPart, tk, func(token *jwt.Token) (interface{}, error) {
+			return []byte(os.Getenv("token_password")), nil
+		})
+
+		if err != nil {
+			response = u.Message(false, "Token hatalı!")
+			w.WriteHeader(http.StatusForbidden)
+			w.Header().Add("Content-Type", "application/json")
+			u.Respond(w, response)
+			return
+		}
+
+		if !token.Valid {
+			response = u.Message(false, "Token geçersiz!")
+			w.WriteHeader(http.StatusForbidden)
+			w.Header().Add("Content-Type", "application/json")
+			u.Respond(w, response)
+			return
+		}
+
+		fmt.Sprintf("Kullanıcı %v", tk.Username)
+		ctx := context.WithValue(r.Context(), "user", tk.UserId)
+
+		r = r.WithContext(ctx)
+		next.ServeHTTP(w, r)
 	})
 
 }
