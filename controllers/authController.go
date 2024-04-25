@@ -16,6 +16,7 @@ var CreateAccount = func(w http.ResponseWriter, r *http.Request) {
 	}
 
 	resp := account.Create()
+	resp["func"] = "CreateAccount"
 	u.Respond(w, resp)
 
 }
@@ -27,7 +28,8 @@ var Authenticate = func(w http.ResponseWriter, r *http.Request) {
 		u.Respond(w, u.Message(false, "Error while decoding request body"))
 		return
 	}
+	resp := models.Login(w, account.Email, account.Password)
 
-	resp := models.Login(account.Email, account.Password)
+	resp["func"] = "Authenticate"
 	u.Respond(w, resp)
 }

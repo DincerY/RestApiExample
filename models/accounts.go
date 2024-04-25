@@ -5,8 +5,10 @@ import (
 	"github.com/dgrijalva/jwt-go"
 	"github.com/jinzhu/gorm"
 	"golang.org/x/crypto/bcrypt"
+	"net/http"
 	"os"
 	"strings"
+	"time"
 )
 
 type Token struct {
@@ -35,9 +37,9 @@ func (account *Account) Validate() (map[string]interface{}, bool) {
 	temp := &Account{}
 
 	err := GetDB().Table("accounts").Where("email = ?", account.Email).First(temp).Error
-	//burada bir hata var
-	if err != nil && err != gorm.ErrRecordNotFound {
-		return u.Message(false, "Connection error. Please retry"), false
+
+	if err != nil && err == gorm.ErrRecordNotFound {
+		return u.Message(false, "Bağlantı hatası oluştu. Lütfen tekrar deneyiniz!"), false
 	}
 
 	if temp.Email != "" {
@@ -62,9 +64,7 @@ func (account *Account) Create() map[string]interface{} {
 		return u.Message(false, "Bağlantı hatası oluştu. Kullanıcı yaratılamadı!")
 	}
 
-	tk := &Token{
-		UserId: account.ID,
-	}
+	tk := &Token{UserId: account.ID, Username: strings.Split(account.Email, "@")[0]}
 
 	token := jwt.NewWithClaims(jwt.GetSigningMethod("HS256"), tk)
 
@@ -79,7 +79,7 @@ func (account *Account) Create() map[string]interface{} {
 	return response
 }
 
-func Login(email, password string) map[string]interface{} {
+func Login(w http.ResponseWriter, email, password string) map[string]interface{} {
 	account := &Account{}
 
 	err := GetDB().Table("accounts").Where("email = ?", email).First(account).Error
@@ -98,24 +98,36 @@ func Login(email, password string) map[string]interface{} {
 
 	account.Password = ""
 
-	tk := &Token{UserId: account.ID}
+	tk := &Token{UserId: account.ID, Username: strings.Split(account.Email, "@")[0]}
 	token := jwt.NewWithClaims(jwt.GetSigningMethod("HS256"), tk)
 	tokenString, _ := token.SignedString([]byte(os.Getenv("token_password")))
 	account.Token = tokenString
 
 	resp := u.Message(true, "Logging successfully")
 	resp["account"] = account
-	return resp
 
+	c := http.Cookie{
+		Name:     "token",
+		Value:    tokenString,
+		Path:     "/",
+		Domain:   "localhost",
+		Expires:  time.Time{},
+		HttpOnly: false,
+		SameSite: 0,
+	}
+	http.SetCookie(w, &c)
+
+	return resp
 }
 
-func GetUser(u uint) *Account {
+func GetUser(id string) map[string]interface{} {
 	acc := &Account{}
-	GetDB().Table("accounts").Where("id = ?", u).First(acc)
+	GetDB().Table("accounts").Where("id = ?", id).First(acc)
 	if acc.Email == "" {
-		return nil
+		return u.Message(false, "Girilen id de bir hesap bulunamadı")
 	}
-
 	acc.Password = ""
-	return acc
+	resp := u.Message(true, "Account found")
+	resp["account"] = acc
+	return resp
 }
